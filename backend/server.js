@@ -1,12 +1,9 @@
 import express from "express";
 import { initDB } from "./config/db.js";
 import { seedData } from "./config/seed.js";
-import { createServer as createViteServer } from "vite";
-import path from "path";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
 // Routes
@@ -17,9 +14,6 @@ import oppRoutes from "./routes/opp.routes.js";
 import appRoutes from "./routes/app.routes.js";
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   initDB();
@@ -36,17 +30,16 @@ async function startServer() {
     })
   );
 
-  // ✅ SIMPLE + BULLETPROOF CORS
+  // ✅ BULLETPROOF CORS
   app.use(
     cors({
-      origin: true,          // reflect requesting origin automatically
-      credentials: true,     // allow cookies if needed
+      origin: true,
+      credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     })
   );
 
-  // ✅ Ensure preflight requests always succeed
   app.options("*", cors());
 
   app.use(express.json());
@@ -70,24 +63,9 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  if (process.env.NODE_ENV === "production") {
-    const buildPath = path.resolve(__dirname, "dist");
-    app.use(express.static(buildPath));
-
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(buildPath, "index.html"));
-    });
-  } else {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  }
-
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`\n🚀 VolunteerHub Server is ready!`);
-    console.log(`📡 Port: ${PORT}`);
+    console.log(`📡 Port: http://localhost:${PORT}`);
   });
 }
 
