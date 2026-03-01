@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import { initDB } from "./config/db.js";
 import { seedData } from "./config/seed.js";
@@ -17,14 +18,25 @@ import appRoutes from "./routes/app.routes.js";
 dotenv.config();
 
 async function startServer() {
-  initDB();
-  await seedData();
+  // =======================
+  // Database initialization and seed
+  // =======================
+  try {
+    await initDB();
+    await seedData();
+  } catch (err) {
+    console.error("❌ Failed to initialize DB or seed data:", err);
+    process.exit(1); // Stop if DB fails
+  }
 
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  app.set("trust proxy", 1);
+  app.set("trust proxy", 1); // For rate limiting behind proxies
 
+  // =======================
+  // Security and Middleware
+  // =======================
   app.use(
     helmet({
       contentSecurityPolicy: false,
@@ -44,7 +56,7 @@ async function startServer() {
   app.use(express.json());
 
   const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
@@ -52,10 +64,9 @@ async function startServer() {
 
   app.use("/api/", limiter);
 
-  // ===============================
-  // ✅ GEMINI CHATBOT INTEGRATION
-  // ===============================
-
+  // =======================
+  // GEMINI CHATBOT INTEGRATION
+  // =======================
   if (!process.env.GEMINI_API_KEY) {
     console.error("❌ GEMINI_API_KEY is missing in .env file");
   }
@@ -71,7 +82,7 @@ async function startServer() {
       }
 
       const model = genAI.getGenerativeModel({
-        model: "models/gemini-1.0-pro", // ✅ Correct model for v0.24.1
+        model: "models/gemini-1.0-pro",
       });
 
       const chatHistory = messages
@@ -97,7 +108,6 @@ AI:
 `;
 
       const result = await model.generateContent(prompt);
-
       const response = await result.response;
       const text = response.text();
 
@@ -116,20 +126,32 @@ AI:
     }
   });
 
-  // ===============================
-  // EXISTING ROUTES (UNCHANGED)
-  // ===============================
-
+  // =======================
+  // ROUTES (UNCHANGED)
+  // =======================
   app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/organizations", orgRoutes);
   app.use("/api/opportunities", oppRoutes);
   app.use("/api/applications", appRoutes);
 
+  // =======================
+  // Health Check
+  // =======================
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // =======================
+  // Catch-all 404 for undefined routes
+  // =======================
+  app.use((req, res) => {
+    res.status(404).json({ error: "Route not found" });
+  });
+
+  // =======================
+  // Start server
+  // =======================
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`\n🚀 VolunteerHub Server is ready!`);
     console.log(`📡 Port: http://localhost:${PORT}`);
