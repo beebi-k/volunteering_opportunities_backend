@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Routes
 import authRoutes from "./routes/auth.routes.js";
@@ -30,7 +31,6 @@ async function startServer() {
     })
   );
 
-  // ✅ BULLETPROOF CORS
   app.use(
     cors({
       origin: true,
@@ -41,7 +41,6 @@ async function startServer() {
   );
 
   app.options("*", cors());
-
   app.use(express.json());
 
   const limiter = rateLimit({
@@ -52,6 +51,74 @@ async function startServer() {
   });
 
   app.use("/api/", limiter);
+
+  // ===============================
+  // ✅ GEMINI CHATBOT INTEGRATION
+  // ===============================
+
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("❌ GEMINI_API_KEY is missing in .env file");
+  }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const { messages } = req.body;
+
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ reply: "Invalid messages format." });
+      }
+
+      const model = genAI.getGenerativeModel({
+        model: "models/gemini-1.0-pro", // ✅ Correct model for v0.24.1
+      });
+
+      const chatHistory = messages
+        .map(
+          (msg) =>
+            `${msg.role === "assistant" ? "AI" : "User"}: ${msg.content}`
+        )
+        .join("\n");
+
+      const prompt = `
+You are a helpful assistant for "VolunteerHub India".
+
+Your goal:
+- Suggest Indian NGOs like Goonj, CRY, Teach For India.
+- Help users find volunteering opportunities.
+- Be polite, warm, and culturally relatable.
+- Keep answers concise and formatted in markdown.
+
+Conversation so far:
+${chatHistory}
+
+AI:
+`;
+
+      const result = await model.generateContent(prompt);
+
+      const response = await result.response;
+      const text = response.text();
+
+      if (!text) {
+        throw new Error("Empty response from Gemini");
+      }
+
+      res.json({ reply: text });
+    } catch (error) {
+      console.error("🔥 Chatbot error:", error);
+
+      res.status(500).json({
+        reply:
+          "Namaste! I'm having trouble connecting right now. Please try again in a moment.",
+      });
+    }
+  });
+
+  // ===============================
+  // EXISTING ROUTES (UNCHANGED)
+  // ===============================
 
   app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);
